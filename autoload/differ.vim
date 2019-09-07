@@ -4,13 +4,17 @@
 " License:          This file is placed in the public domain.
 
 if !executable('git')
-    echo "You must have git installed to use this plugin"
+    echoerr "You must have git installed to use this plugin"
     finish
 endif
 
 function! s:git_check()
-    call system('git status')
-    return v:shell_error == 0
+    let out = trim(system('git status'))
+    if v:shell_error == 0
+        return 1
+    else
+        echomsg "Unable to get git status:'".out."'"
+    endif
 endfunction
 
 function! s:git_status()
@@ -169,7 +173,7 @@ endfun
 " -------------------------------------------------------------
 
 function! differ#diff(target)
-    if !s:git_check() | finish | endif
+    if !s:git_check() | return | endif
     let ref = s:target_ref(a:target)
     let ft = &ft
     let fname = expand('%')
@@ -178,7 +182,7 @@ function! differ#diff(target)
 endfunction
 
 function! differ#patch(target)
-    if !s:git_check() | finish | endif
+    if !s:git_check() | return | endif
     let ref = s:target_ref(a:target)
     let fname = expand('%')
     execute 'new [PATCH:'.ref.'] '.fname.': '. s:git_ctitle(ref)
@@ -187,20 +191,20 @@ function! differ#patch(target)
 endfunction
 
 function! differ#patch_all(target)
-    if !s:git_check() | finish | endif
+    if !s:git_check() | return | endif
     let ref = s:target_ref(a:target)
     execute 'tabnew __PATCH__' . ref
     call s:load_patch_all(ref)
 endfunction
 
 function! differ#list_refs(A,L,P)
-    if !s:git_check() | finish | endif
+    if !s:git_check() | return | endif
     let refs = s:git_refs()
     return refs
 endfun
 
 function! differ#set_target(target)
-    if !s:git_check() | finish | endif
+    if !s:git_check() | return | endif
     let s:target_ref = a:target == "" ? s:select_ref() : a:target
     if s:target_ref != ""
         echo "Setting diff target ref to '".s:target_ref."'."
@@ -210,7 +214,7 @@ function! differ#set_target(target)
 endfunction
 
 function! differ#status()
-    if !s:git_check() | finish | endif
+    if !s:git_check() | return | endif
     echo s:git_status()
     let local = "HEAD"
     let remote = s:target_ref("")
