@@ -3,40 +3,59 @@
 " Maintainer:       Niko Steinhoff <niko.steinhoff@gmail.com>
 " License:          This file is placed in the public domain.
 
-" if exists("g:loaded_beg2differ")
-"     finish
-" endif
-" let g:loaded_beg2differ = 1
-
-aug insta_source
-    au!
-    au BufWritePost <buffer> source %
-aug END
-
 if !executable('git')
     echo "You must have git installed to use this plugin"
     finish
 endif
 
 function! s:git_status()
-    return system('git status')
+    let status = system('git status')
+    let stat = system('git diff --stat')
+    return status."\n".stat
+endfunction
+
+function! s:git_branches()
+    return systemlist("git branch -a --format '%(refname:short)'")
+endfunction
+
+function! s:git_commits_short(n)
+    return systemlist("git log -n ".a:n." --pretty='%h'")
+endfunction
+
+function! s:git_commits(n)
+    return systemlist("git log -n ".a:n." --pretty='%H'")
 endfunction
 
 function! s:git_refs()
-    return systemlist("git branch -a --format '%(refname:short)'")
+    let branches = s:git_branches()
+    let commits = s:git_commits_short(50)
+    return branches + commits
 endfunction
 
 function! s:git_current_branch()
     return trim(system("git rev-parse --abbrev-ref HEAD"))
 endfunction
 
-function! s:git_mergebase(this, ...)
-    let that = a:0 == 0 ? "HEAD" : a:1
+function! s:git_mergebase(this, that)
+    let that = s:target_ref(a:that)
     return trim(system("git merge-base ".a:this." ".that))
+endfunction
+
+function! s:git_mergebases()
+    let this = "HEAD"
+    let bases = {}
+    for b in s:git_branches()
+        let bases[b] = s:git_mergebase(b, "HEAD")
+    endfor
+    return bases
 endfunction
 
 function! s:git_cfiles(ref)
     return systemlist("git diff --name-only ".a:ref)
+endfunction
+
+function! s:git_chash(ref)
+    return trim(system("git log -n1 --format='%h' ".a:ref))
 endfunction
 
 function! s:git_ctitle(ref)
@@ -60,13 +79,36 @@ function! s:git_patch_all(ref)
 endfunction
 
 function! s:select_ref()
-    let refs = s:git_refs()
-    let items = ["Pick a ref:"]
-    for i in range(0, len(refs)-1)
-        let num = i+1
-        let ref = refs[i]
-        let msg = s:git_ctitle(ref)
-        call add(items, ' '.num.') '.ref.': '.msg)
+    let candidates = {}
+    let items = ["Pick a ref to diff against:"]
+
+    for ref in s:git_branches()
+        let name = '-@ '.ref.' ('.s:git_chash(ref).')'
+        let desc = s:git_ctitle(ref)
+        let item = {'ref': ref, 'name': name, 'desc': desc}
+        let candidates[len(candidates)+1] = item
+    endfor
+
+    for [branch, ref] in items(s:git_mergebases())
+        let name = '-< '.branch.' ('.s:git_chash(ref).')'
+        let desc = s:git_ctitle(ref)
+        let item = {'ref': ref, 'name': name, 'desc': desc}
+        let candidates[len(candidates)+1] = item
+    endfor
+
+    let n_commits = &lines - len(items) - 10
+    for ref in s:git_commits(n_commits)
+        let name = '-- '.strcharpart(ref, 0, 7)
+        let desc = s:git_ctitle(ref)
+        let item = {'ref': ref, 'name': name, 'desc': desc}
+        let candidates[len(candidates)+1] = item
+    endfor
+
+    for [i, candidate] in items(candidates)
+        let name = candidate['name']
+        let shift = repeat(' ', 30 - strwidth(name))
+        let desc = candidate['desc']
+        call add(items, ' '.i.') '.name.shift.desc)
     endfor
     let choice = inputlist(items) | echo "\n"
 
@@ -77,7 +119,8 @@ function! s:select_ref()
         echo "Sorry! '".choice."' is not a valid choice!"
         return ""
     else
-        return refs[choice-1]
+        echo choice.': '.candidates[choice]['name']
+        return candidates[choice]['ref']
     endif
 endfunction
 
@@ -114,6 +157,11 @@ function! s:load_patch_all(ref)
     let patch = s:git_patch_all(a:ref)
     call append(0, patch)
 endfun
+
+
+" -------------------------------------------------------------
+" Section: Public
+" -------------------------------------------------------------
 
 function! differ#diff(target)
     let ref = s:target_ref(a:target)
@@ -159,9 +207,3 @@ function! differ#status()
     echo "LOCAL: ".s:git_csummary(local)
     echo "REMOTE: ".remote.' - '.s:git_csummary(remote)
 endfunction
-
-command! -complete=customlist,differ#list_refs -nargs=? Diff call differ#diff(<q-args>)
-command! -complete=customlist,differ#list_refs -nargs=? Patch call differ#patch(<q-args>)
-command! -complete=customlist,differ#list_refs -nargs=? PatchAll call differ#patch_all(<q-args>)
-command! -complete=customlist,differ#list_refs -nargs=? DiffTarget call differ#set_target(<q-args>)
-command! DiffStatus call differ#status()
