@@ -63,6 +63,10 @@ function! s:git_cfiles(ref)
     return systemlist("git diff --name-only ".a:ref)
 endfunction
 
+function! s:git_has_changed(fname, ref)
+    return count(s:git_cfiles(a:ref), a:fname) > 0
+endfunction
+
 function! s:git_chash(ref)
     return trim(system("git log -n1 --format='%h' ".a:ref))
 endfunction
@@ -117,9 +121,10 @@ function! s:select_ref()
         let name = candidate['name']
         let shift = repeat(' ', 30 - strwidth(name))
         let desc = candidate['desc']
-        call add(items, ' '.i.') '.name.shift.desc)
+        let num = repeat(' ', strchars(len(candidates)) - strchars(i)).i
+        call add(items, ' '.num.') '.name.shift.desc)
     endfor
-    let choice = inputlist(items) | echo "\n"
+    let choice = inputlist(sort(items)) | echo "\n"
 
     if choice <= 0
         echo "Okay then..."
