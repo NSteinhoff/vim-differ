@@ -141,10 +141,16 @@ endfunction
 function! s:target_ref(target)
     if a:target != ""
         return a:target
-    elseif exists('s:target_ref') && s:target_ref
+    elseif exists('s:target_ref') && s:target_ref != ""
         return s:target_ref
     else
         return 'HEAD'
+    endif
+endfunction
+
+function! s:set_args(ref)
+    let changed = s:git_cfiles(a:ref)
+    execute 'args '.join(changed, ' ')
 endfunction
 
 function! s:load_original(fname, ref, ft)
@@ -183,6 +189,7 @@ function! differ#diff(target)
     let ft = &ft
     let fname = expand('%')
     execute 'vnew [DIFF:'.ref.'] '.fname.': '. s:git_ctitle(ref)
+    nnoremap <buffer> q :quit!<CR>
     call s:load_original(fname, ref, ft)
 endfunction
 
@@ -192,6 +199,7 @@ function! differ#patch(target)
     let fname = expand('%')
     execute 'new [PATCH:'.ref.'] '.fname.': '. s:git_ctitle(ref)
     wincmd K | resize 9
+    nnoremap <buffer> q :quit!<CR>
     call s:load_patch(fname, ref)
 endfunction
 
@@ -199,6 +207,7 @@ function! differ#patch_all(target)
     if !s:git_check() | return | endif
     let ref = s:target_ref(a:target)
     execute 'tabnew __PATCH__' . ref
+    nnoremap <buffer> q :tabclose!<CR>
     call s:load_patch_all(ref)
 endfunction
 
@@ -216,6 +225,7 @@ function! differ#set_target(target)
     else
         echo "Using default target ref."
     endif
+    call s:set_args(s:target_ref)
 endfunction
 
 function! differ#status()
